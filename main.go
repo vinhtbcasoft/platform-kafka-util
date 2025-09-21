@@ -6,6 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/tbcasoft/platform-kafka-util/core"
 	"os"
+	"time"
 )
 
 /*
@@ -14,9 +15,11 @@ One time setup of the Go process includes:
 - Reading command line args to Kafka broker
 */
 func init() {
-	flag.StringVar(&core.TopicName, "topic", "xcm_egress_syslogs_tbca", "Default is xcm_egress_syslogs_tbca")
-	flag.IntVar(&core.RequestsPerSsec, "rps", 100, "The desired rps.")
+	flag.StringVar(&core.TopicName, "topic", "syslogs", "Default is syslogs, just like Vector.")
+	flag.IntVar(&core.RequestsPerSsec, "rps", 1000, "The desired rps.")
 	flag.StringVar(&core.InputFileName, "inputfile", "loadTestSimulatedMsg", "File name of message to enqueue.")
+	flag.Var(&core.KafkaBrokers, "broker", "Argument (-broker) for host:port.  For multiple hosts, use argument for each host (e.g. -broker 10.8.9.1:9092 -broker 10.8.11.1:9092")
+	flag.Parse()
 }
 
 func main() {
@@ -42,22 +45,27 @@ func main() {
 	}
 
 	//== get producer
-	kafkaSyncProducer, err := core.NewSaramaSyncMessageProducer(core.Brokers)
+	kafkaSyncProducer, err := core.NewSaramaSyncMessageProducer(core.KafkaBrokers)
 	if err != nil {
-		logrus.Errorf("Unable to get Kafka producer from broker (%s)", core.Brokers)
+		logrus.Errorf("Unable to get Kafka producer from broker (%s)", core.KafkaBrokers)
 		panic(err)
 	}
 
-	//== TODO: loop through to achieve desired RPS
-	for i := 0; i < 1000; i++ {
+	start := time.Now()
+	msgsEnqueued := 0
+	for i := 0; i < core.RequestsPerSsec; i++ {
 		partition, msgOffset, err := kafkaSyncProducer.SendMessage(msg)
 		if err != nil {
 			logrus.Error("Failed to enqueue received msg to topic %s.", core.TopicName)
 			panic(err)
 		}
 
-		logrus.Infof("Msg enqueued to topic:partition (%s:%d), offset of enqueued (%d)",
-			core.TopicName, partition, msgOffset)
+		msgsEnqueued++
+
+		logrus.Debugf("Msg enqueued to topic:partition (%s:%d), offset of enqueued (%d)", core.TopicName, partition, msgOffset)
 	}
 
+	//Note: elapse time unit is encapsulated, use its methods to get appropriate unit
+	elapse := time.Since(start)
+	logrus.Infof(" Goal of %d RPS, actually Enqueued %d. Cycle time (%.3f secs)", core.RequestsPerSsec, msgsEnqueued, elapse.Seconds())
 }

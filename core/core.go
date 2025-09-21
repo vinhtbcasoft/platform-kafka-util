@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"github.com/IBM/sarama"
 	"github.com/rcrowley/go-metrics"
 	"os"
@@ -9,10 +10,24 @@ import (
 var (
 	TopicName       string
 	RequestsPerSsec int
-	Brokers         = []string{"localhost:9092"}
 	InputFileName   string
 	LogFileName     = "platform_kafka_util.log"
 )
+
+type brokersList []string
+
+//== Since variable is defined as interface Var (main.go), we need to implement its methods.
+
+func (i *brokersList) String() string { // String is an implementation of the flag.Value interface.  It's called by any fmt.* mehtods to print its value.
+	return fmt.Sprintf("%v", *i)
+}
+
+func (i *brokersList) Set(value string) error { // Set is an implementation of the flag.Value interface.  It will be called by flag.Parse()
+	*i = append(*i, value)
+	return nil
+}
+
+var KafkaBrokers brokersList
 
 func NewSaramaSyncMessageProducer(brokerList []string) (sarama.SyncProducer, error) {
 	/*
